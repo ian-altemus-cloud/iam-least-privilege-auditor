@@ -1,0 +1,19 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "iam:Get*",
+        "iam:List*",
+        "iam:GenerateServiceLastAccessedDetails",
+        "iam:GetServiceLastAccessedDetails",
+        "access-analyzer:ListAnalyzers",
+        "access-analyzer:ListFindings",
+        "access-analyzer:GetFinding"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
+
