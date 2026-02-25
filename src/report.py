@@ -69,3 +69,27 @@ def write_summary(report, path="output/summary.txt"):
 
             f.write("\n")
 
+def write_markdown_report(enriched_findings, filepath="output/REPORT.md"):
+    with open(filepath, "w") as f:
+        f.write("# IAM Least Privilege Audit Report\n\n")
+
+        for finding in enriched_findings:
+            ai = finding.get("ai_analysis", {})
+
+            f.write(f"## Role: {finding['role']}\n")
+            f.write(f"**Policy:** {finding['policy']}\n")
+            f.write(f"**Permission:** `{finding['action']}` on `{finding['resource']}`\n")
+            f.write(f"**Service:** {finding['service']}\n")
+            f.write(f"**Risk Level:** {ai.get('risk_level', 'N/A').upper()}\n\n")
+
+            f.write("### What This Means\n")
+            f.write(ai.get("explanation", "N/A") + "\n\n")
+
+            f.write("### Abuse Scenario\n")
+            f.write(ai.get("abuse_scenario", "N/A") + "\n\n")
+
+            f.write("### Recommended Remediation\n")
+            for rec in ai.get("remediation_recommendations", []):
+                f.write(f"- {rec}\n")
+
+            f.write("\n---\n\n")

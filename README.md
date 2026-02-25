@@ -2,18 +2,11 @@
 
 ## Overview
 
-This project is a read-only IAM auditing tool that identifies **over-permissive and unused permissions** across AWS IAM roles.
+IAM Least-Privilege Auditor is a read-only AWS security analysis tool that identifies **over-permissive and unused IAM role permissions**.
 
-It combines **static policy analysis** (what permissions are granted) with **runtime usage data** (what services were actually used) to surface **real least-privilege violations**, not just generic wildcard noise.
+It combines deterministic policy analysis with AWS service last-used telemetry to detect real least-privilege violations. An optional AI enrichment layer generates contextual explanations and remediation guidance in executive-readable format.
 
-The goal is to reduce IAM blast radius by highlighting permissions that are:
-
-* Broad (`*`, `service:*`)
-* Granted
-* **Never exercised**
-* Attached to **customer-managed roles**
-
-This mirrors how IAM reviews are done in real security and cloud operations teams.
+The core detection engine is deterministic and security-first. AI is used only to enhance interpretation — never to replace policy analysis.
 
 ---
 
@@ -21,149 +14,69 @@ This mirrors how IAM reviews are done in real security and cloud operations team
 
 For each IAM role in an AWS account, the auditor:
 
-1. Enumerates all roles (read-only)
+1. Enumerates roles (read-only)
 2. Collects:
 
    * Inline policies
    * Attached managed policies
-3. Normalizes every policy statement into analyzable units
-4. Flags:
+3. Normalizes policy statements
+4. Detects:
 
    * Wildcard actions (`*`, `service:*`)
    * Wildcard resources (`*`)
-5. Correlates permissions with **IAM service last-used data**
-6. Filters out AWS-managed / service-linked role noise
+5. Correlates permissions with IAM service last-used data
+6. Excludes AWS-managed / service-linked roles
 7. Produces:
 
-   * A machine-readable JSON report
-   * A human-readable summary ranked by risk
+   * `report.json` (machine-readable findings)
+   * `summary.txt` (risk-ranked summary)
+   * `enriched_findings.json` (AI-enhanced findings)
+   * `REPORT.md` (human-readable executive report)
+
+All operations are strictly read-only.
 
 ---
 
-## Why This Exists
+## Architecture
 
-AWS provides tools like Trusted Advisor and Access Analyzer, but they:
+**Layer 1 – Deterministic Analysis**
 
-* Stop at best-practice checks
-* Don’t correlate permissions with actual usage
-* Aren’t opinionated or remediation-focused
+* IAM role enumeration
+* Policy normalization
+* Wildcard detection
+* Last-used service correlation
+* Risk scoring
 
-This tool answers a more useful question:
+**Layer 2 – AI Enrichment (Optional)**
 
-> *“Which permissions are broad **and** have never been used?”*
+* Plain-English explanation
+* Realistic abuse scenario
+* Risk classification
+* Remediation recommendations
+* Markdown executive reporting
 
-That’s the core of least-privilege enforcement.
-
----
-
-## Architecture (High Level)
-
-* **Collection**: boto3 + IAM APIs
-* **Analysis**: policy normalization + wildcard detection
-* **Correlation**: IAM `GenerateServiceLastAccessedDetails`
-* **Filtering**: AWS-managed role exclusion
-* **Reporting**: risk-scored JSON + readable summary
-
-All operations are **read-only** by design.
----
-## Architecture Diagram
-
-This diagram shows the high-level flow of the IAM Least-Privilege Auditor.
-
-```
-IAM Roles
-   │
-   ▼
-IAM Policies (Inline + Managed)
-   │
-   ▼
-Policy Normalization
-   │
-   ├── Wildcard Detection
-   │
-   └── Service Extraction
-   │
-   ▼
-IAM Last-Used Service Reports
-   │
-   ▼
-Correlation Engine
-   │
-   ▼
-Risk Scoring
-   │
-   ▼
-JSON Report + Human Summary
-```
-
-The auditor operates entirely in **read-only mode** and does not modify IAM resources.
+The AI layer enhances interpretation but does not influence detection logic.
 
 ---
 
-## Screenshots
+## Example Executive Output
 
-The following screenshots show the tool in action and the type of output it produces.
+### Role: cost-guardian-lambda-role
 
-### CLI Execution
+**Permission:** `ec2:Describe*`
+**Risk Level:** MEDIUM
 
-Demonstrates the auditor running locally and generating findings.
+**What This Means**
+This role can retrieve information about all EC2 resources in the account, including instances, volumes, and security groups.
 
-```
-python src/auditor.py
-```
+**Abuse Scenario**
+An attacker could enumerate infrastructure, identify attack surfaces, and prepare for lateral movement.
 
-**Screenshot:** `screenshots/cli-run.png`
+**Recommended Remediation**
 
----
-
-### Risk Summary Output
-
-Human-readable summary showing roles ranked by total risk score.
-
-**Screenshot:** `screenshots/summary-output.png`
-
----
-
-### JSON Findings Report
-
-Machine-readable report used for automation, dashboards, or remediation planning.
-
-**Screenshot:** `screenshots/json-report.png`
-
----
-
-## How to Reproduce the Screenshots
-
-1. Run the auditor from the project root:
-
-   ```
-   python src/auditor.py
-   ```
-2. Capture:
-
-   * Terminal output
-   * `output/summary.txt`
-   * `output/report.json`
-3. Save screenshots under:
-
-   ```
-   screenshots/
-   ├── cli-run.png
-   ├── summary-output.png
-   └── json-report.png
-   ```
-
-These artifacts reflect real execution against a live AWS account.
-
----
-
-## Tech Stack
-
-* Python 3
-* boto3
-* AWS IAM
-* IAM Access Analyzer (read-only)
-* IAM last-used service reports
+* Restrict to required Describe actions only
+* Limit scope where possible
+* Monitor usage patterns
 
 ---
 
@@ -172,81 +85,67 @@ These artifacts reflect real execution against a live AWS account.
 ```
 iam-least-privilege-auditor/
 ├── src/
-│   ├── auditor.py        # Main execution logic
-│   ├── iam_collector.py  # IAM + last-used data collection
-│   ├── analyzer.py       # Policy normalization & analysis
-│   └── report.py         # Risk scoring & report generation
+│   ├── auditor.py
+│   ├── iam_collector.py
+│   ├── analyzer.py
+│   ├── report.py
+│   └── ai_enricher.py
 ├── output/
-│   ├── report.json       # Machine-readable findings
-│   └── summary.txt       # Human-readable summary
-├── config/
+│   ├── report.json
+│   ├── summary.txt
+│   ├── enriched_findings.json
+│   └── REPORT.md
 ├── requirements.txt
 └── README.md
 ```
 
 ---
+
 ## Quick Start
 
-1. Create and activate virtual environment:
-   ```bash
-   python3 -m venv .venv
-   source .venv/bin/activate
-
-## How It Scores Risk
-
-Each unused permission is scored using a simple, explainable heuristic:
-
-* Wildcard action: **+5**
-* Wildcard resource: **+3**
-* Service unused: **+4**
-* Customer-managed role: **+2**
-
-This produces a **relative risk ranking**, not a false sense of precision.
-
----
-
-## Example Output
-
-**summary.txt**
-
-```
-Role: cost-hygiene-ecs-task-role
-Total Risk Score: 38
-Findings: 5
-  - ec2 | ec2:DescribeInstances | risk=9
-  - cloudwatch | cloudwatch:GetMetricStatistics | risk=9
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
 ```
 
-This highlights permissions that are safe to tighten or remove.
+Ensure AWS credentials are configured with read-only IAM permissions.
+
+Run:
+
+```bash
+python src/auditor.py
+```
+
+If using AI enrichment, set:
+
+```bash
+export OPENAI_API_KEY="your-api-key"
+```
 
 ---
 
-## Design Decisions
+## Risk Scoring Model
 
-* The tool runs with **read-only IAM permissions**
-* AWS-managed and service-linked roles are excluded from “unused” judgments
-* IAM usage data is treated as **directional**, not absolute
-* Static analysis alone is intentionally insufficient — usage matters
+Each finding is ranked using a simple heuristic:
 
-These choices reflect real IAM limitations and avoid false confidence.
+* Wildcard action: +5
+* Wildcard resource: +3
+* Service unused: +4
+* Customer-managed role: +2
 
----
-
-## Limitations
-
-* IAM last-used data is incomplete for some AWS service roles
-* New or lightly used accounts will naturally show more unused permissions
-* This tool identifies **candidates** for removal, not automatic fixes
+This produces relative prioritization, not artificial precision.
 
 ---
 
-## Possible Extensions
+## Design Principles
 
-* Lambda + EventBridge scheduled execution
-* Slack or email reporting
-* Policy diff generation for remediation
-* Age thresholds (30 / 60 / 90 days unused)
-* Cross-account aggregation
+* Read-only by design
+* Deterministic detection first
+* AI used for interpretation only
+* Cost-controlled AI calls
+* Separation of machine and executive outputs
+* Avoid false confidence in telemetry data
 
 ---
 
@@ -256,14 +155,23 @@ IAM is one of the most misunderstood areas of AWS.
 
 This project demonstrates:
 
-* Deep understanding of IAM internals
-* Security-first design
-* Practical cloud operations thinking
-* Ability to turn AWS telemetry into actionable insight
+* Deep IAM policy understanding
+* Security-first cloud thinking
+* Practical use of AWS telemetry
+* AI augmentation without sacrificing deterministic controls
+* Clean separation between analysis and reporting layers
 
 ---
 
-## Author
+## Positioning
 
-Built as a hands-on cloud security project to better understand IAM behavior, privilege creep, and real-world least-privilege enforcement.
+This tool reflects the mindset of a cloud engineer who understands that:
+
+* Infrastructure security requires precision
+* Telemetry must be interpreted carefully
+* Automation should enhance clarity, not introduce risk
+
+---
+
+Built as part of a broader cloud automation and security portfolio including cost governance and serverless event-driven systems.
 
